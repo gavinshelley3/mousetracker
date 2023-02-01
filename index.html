@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      .container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        background-color: lightgray;
+      }
+
+      .ball {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        z-index: 5;
+        border-radius: 50%;
+        background-color: blue;
+      }
+
+      .target {
+        position: absolute;
+        width: 40px;
+        height: 40px;
+        z-index: 4;
+        border-radius: 50%;
+        background-color: red;
+      }
+
+      .leaderboard {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 200px;
+        height: 200px;
+        background-color: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 1px 1px 5px gray;
+        text-align: center;
+      }
+
+      .timer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        padding: 10px;
+        font-size: 16px;
+        font-weight: bold;
+      }
+
+      .start-game-button {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 10px 20px;
+        background-color: blue;
+        color: white;
+        border-radius: 10px;
+        cursor: pointer;
+        box-shadow: 1px 1px 5px gray;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ball" class="ball"></div>
+
+    <button id="start-game-button" class="start-game-button">
+      Start Game (a)
+    </button>
+
+    <div id="target" class="target"></div>
+
+    <div id="timer" class="timer"></div>
+    <div id="controller" class="timer"></div>
+
+    <div id="leaderboard" class="leaderboard">
+      <h2>Leaderboard</h2>
+      <ol id="leaderboard-list"></ol>
+    </div>
+
+    <script>
+      const startGameButton = document.getElementById("start-game-button");
+      const target = document.getElementById("target");
+      const timer = document.getElementById("timer");
+      const leaderboardList = document.getElementById("leaderboard-list");
+      let clicks = 0;
+      let startTime = null;
+      let intervalId;
+      let leaderboard = [];
+
+      const leaderBoardDisplay = document.getElementById("leaderboard");
+
+      function setRandomTargetPosition() {
+        const scoreboardBounds = leaderBoardDisplay.getBoundingClientRect();
+
+        target.style.left = Math.random() * (window.innerWidth - 40) + "px";
+        target.style.top = Math.random() * (window.innerHeight - 40) + "px";
+
+        const targetBounds = target.getBoundingClientRect();
+
+        if (
+          targetBounds.left < scoreboardBounds.left + scoreboardBounds.width &&
+          targetBounds.left + targetBounds.width > scoreboardBounds.left &&
+          targetBounds.top < scoreboardBounds.top + scoreboardBounds.height &&
+          targetBounds.top + targetBounds.height > scoreboardBounds.top
+        ) {
+          setRandomTargetPosition();
+        }
+      }
+
+      function updateLeaderboard(time) {
+        leaderboard.push(time);
+        leaderboard.sort((a, b) => a - b);
+        if (leaderboard.length > 5) {
+          leaderboard.pop();
+        }
+        leaderboardList.innerHTML = "";
+        for (const [index, time] of leaderboard.entries()) {
+          const leaderboardItem = document.createElement("li");
+          leaderboardItem.textContent = `${time} seconds`;
+          leaderboardList.appendChild(leaderboardItem);
+        }
+      }
+
+      function startGame() {
+        startGameButton.style.display = "none";
+        target.style.display = "block";
+        setRandomTargetPosition();
+        clicks = 0;
+        startTime = Date.now();
+        intervalId = setInterval(function () {
+          const elapsedTime = (Date.now() - startTime) / 1000;
+          timer.textContent = `Time: ${elapsedTime} seconds`;
+        }, 100);
+      }
+
+      startGameButton.addEventListener("click", () => {
+        startGame();
+        // hide the ball
+        const ball = document.getElementById("ball");
+        ball.style.display = "none";
+      });
+
+      const finishGame = () => {
+        clearInterval(intervalId);
+        //Stop clock and update leaderboard
+        const elapsedTime = (Date.now() - startTime) / 1000;
+        timer.textContent = `Time: ${elapsedTime} seconds`;
+        updateLeaderboard(elapsedTime);
+        startTime = null;
+        startGameButton.style.display = "block";
+        target.style.display = "none";
+      };
+
+      target.addEventListener("click", function () {
+        clicks++;
+        if (clicks === 10) {
+          finishGame();
+        }
+        setRandomTargetPosition();
+      });
+
+      const controller = document.getElementById("controller");
+      // tie into game controller events
+      window.addEventListener("gamepadconnected", function (event) {
+        // set timeout to update the controller div everytime the stick is moved
+        setInterval(function () {
+          const gamepads = navigator.getGamepads();
+          if (!gamepads) {
+            return;
+          }
+
+          const gp = gamepads[0];
+
+          // if the 'a' button is pressed start the game.
+          // only works if the game is not already started
+          if (!startTime) {
+            if (gp.buttons[0].pressed) {
+              const ball = document.getElementById("ball");
+              ball.style.display = "block";
+              startGame();
+            }
+            return;
+          }
+
+          // Don't allow the controller to move the ball off the screen
+          const ballBounds = ball.getBoundingClientRect();
+          if (ballBounds.left < 20) {
+            ball.style.left = 20 + "px";
+          }
+          if (ballBounds.top < 20) {
+            ball.style.top = 20 + "px";
+          }
+          if (ballBounds.left + ballBounds.width > window.innerWidth - 20) {
+            ball.style.left = window.innerWidth - ballBounds.width - 20 + "px";
+          }
+          if (ballBounds.top + ballBounds.height > window.innerHeight - 20) {
+            ball.style.top = window.innerHeight - ballBounds.height - 20 + "px";
+          }
+
+          // if the trigger is pressed make the ball orange
+          if (gp.buttons[7].pressed) {
+            ball.style.backgroundColor = "orange";
+
+            // see if its intersecting the target and if it is then move the target
+            const ballBounds = ball.getBoundingClientRect();
+            const targetBounds = target.getBoundingClientRect();
+
+            if (
+              ballBounds.left < targetBounds.left + targetBounds.width &&
+              ballBounds.left + ballBounds.width > targetBounds.left &&
+              ballBounds.top < targetBounds.top + targetBounds.height &&
+              ballBounds.top + ballBounds.height > targetBounds.top
+            ) {
+              clicks++;
+              if (clicks === 10) {
+                finishGame();
+              }
+              console.log(clicks);
+              setRandomTargetPosition();
+            }
+          } else {
+            ball.style.backgroundColor = "green";
+          }
+
+          // move the ball with the gamepad
+          ball.style.left = ball.offsetLeft + gp.axes[0] * 20 + "px";
+
+          ball.style.top = ball.offsetTop + gp.axes[1] * 20 + "px";
+        }, 25);
+
+        console.log(
+          "Gamepad connected at index %d: %s. %d buttons, %d axes.",
+          event.gamepad.index,
+          event.gamepad.id,
+          event.gamepad.buttons.length,
+          event.gamepad.axes.length
+        );
+      });
+    </script>
+  </body>
+</html>
